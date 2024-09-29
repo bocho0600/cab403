@@ -30,130 +30,133 @@ typedef struct {
 car_shared_mem *car;
 
 // Function declarations
-char* UpFloor(char currentFloor[4]);
-char* DownFloor(char currentFloor[4]);
+char* UpFloor(const char currentFloor[4]);
+char* DownFloor(const char currentFloor[4]);
 
 int main(int argc, char *argv[]) {
-      if (argc != 3) {
-            printf("Usage: %s {car name} <operation>\n", argv[0]);
-            return 1;
-      }
+    if (argc != 3) {
+        printf("Usage: %s {car name} <operation>\n", argv[0]);
+        return 1;
+    }
 
-      char *car_name = argv[1];
-      char *operation = argv[2];
+    char *car_name = argv[1];
+    char *operation = argv[2];
 
-      // Open the shared memory object
-      char shm_name[256];
-      snprintf(shm_name, sizeof(shm_name), "%s%s", SHARED_MEM_BASE_NAME, car_name); // Create the shared memory name (car name)
-      int shm_fd = shm_open(shm_name, O_RDWR, 0666); // Open the shared memory object - read/write mode
-      if (shm_fd == -1) {
-            perror("Error opening shared memory object");
-            return 1;
-      }
+    // Open the shared memory object
+    char shm_name[256];
+    snprintf(shm_name, sizeof(shm_name), "%s%s", SHARED_MEM_BASE_NAME, car_name); // Create the shared memory name with carname
+    int shm_fd = shm_open(shm_name, O_RDWR, 0666); // Open the shared memory object - read/write mode
+    if (shm_fd == -1) {
+        printf("Unable to access car %s.\n", car_name);
+        return 1;
+    }
 
-      // Map the shared memory object onto the address space
-      car = (car_shared_mem *)mmap(NULL, sizeof(car_shared_mem), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
-      if (car == MAP_FAILED) {
-            perror("Error mapping the shared memory object");
-            return 1;
-      }
+    // Map the shared memory object onto the address space
+    car = (car_shared_mem *)mmap(NULL, sizeof(car_shared_mem), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (car == MAP_FAILED) {
+        perror("Error mapping the shared memory object");
+        return 1;
+    }
 
-      // Mutex lock
-      pthread_mutex_lock(&car->mutex); // Use `car->mutex` instead of `shared_mem->mutex`
+    // Mutex lock
+    pthread_mutex_lock(&car->mutex);
 
-      // Perform the operation
-      if (strcmp(operation, "open") == 0) {
-            car->open_button = 1;
-      } else if (strcmp(operation, "close") == 0) {
-            car->close_button = 1;
-      } else if (strcmp(operation, "stop") == 0) {
-            car->emergency_stop = 1;
-      } else if (strcmp(operation, "service_on") == 0) {
-            car->individual_service_mode = 1;
-            car->emergency_mode = 0;
-      } else if (strcmp(operation, "service_off") == 0) {
-            car->individual_service_mode = 0;
-      } else if ((strcmp(operation, "up") == 0) && (strcmp(car->status, "MOVING") == 0)& & car->individual_service_mode) { 
-            if(car->individual_service_mode){
-                  if(strcmp(car->status, "MOVING") == 0){
-
-                  } 
+    // Perform the operation
+    if (strcmp(operation, "open") == 0) {
+        car->open_button = 1;
+    } else if (strcmp(operation, "close") == 0) {
+        car->close_button = 1;
+        //strcpy(car->status, "Closed");
+    } else if (strcmp(operation, "stop") == 0) {
+        car->emergency_stop = 1;
+    } else if (strcmp(operation, "service_on") == 0) {
+        car->individual_service_mode = 1;
+        car->emergency_mode = 0;
+    } else if (strcmp(operation, "service_off") == 0) {
+        car->individual_service_mode = 0;
+    } else if (strcmp(operation, "up") == 0) {
+        if (car->individual_service_mode) {
+            if (strcmp(car->status, "Closed") == 0) {
+                strcpy(car->destination_floor, UpFloor(car->current_floor)); // Update destination floor
+            } else if(strcmp(car->status, "Between") == 0) {
+                printf("Operation not allowed while elevator is moving.\n");
             } else {
-                  printf("Operation only allowed in service mode.\n");
+                printf("Operation not allowed while doors are open.\n");
             }
-            strcpy(car->destination_floor, UpFloor(car->current_floor)); // Update destination floor
-            //strcpy(car->current_floor, car->destination_floor); // Update current floor after moving
-            printf("Current floor: %s\n", car->current_floor);
-                  
-      } else if ((strcmp(operation, "down") == 0) && !(strcmp(car->status, "MOVING") == 0) && car->individual_service_mode) {
-            strcpy(car->destination_floor, DownFloor(car->current_floor)); // Update destination floor
-            //strcpy(car->current_floor, car->destination_floor); // Update current floor after moving
-            printf("Current floor: %s\n", car->current_floor);
+        } else {
+            printf("Operation only allowed in service mode.\n");
+        }
+    } else if (strcmp(operation, "down") == 0) {
+        if (car->individual_service_mode) {
+            if(strcmp(car->status, "Closed") == 0) {
+                strcpy(car->destination_floor, DownFloor(car->current_floor)); // Update destination floor
+            } else if(strcmp(car->status, "Between") == 0) {
+                printf("Operation not allowed while elevator is moving.\n");
+            } else {
+                printf("Operation not allowed while doors are open.\n");
+            }
+        } else {
+            printf("Operation only allowed in service mode.\n");
+        }
+    } else {
+        printf("Invalid operation.\n");
+        pthread_mutex_unlock(&car->mutex); // Unlock mutex before return
+        return 1;
+    }
 
-      } else {
-            printf("Invalid operation specified.\n");
-            pthread_mutex_unlock(&car->mutex); // Unlock mutex before return
-            return 1;
-      }
+    // Unlock mutex
+    pthread_mutex_unlock(&car->mutex);
 
-      // Unlock mutex
-      pthread_mutex_unlock(&car->mutex);
+    // Optionally, signal the condition variable to notify waiting threads
+    pthread_cond_broadcast(&car->cond);
 
-      // Optionally, signal the condition variable to notify waiting threads
-      //pthread_cond_broadcast(&car->cond);
-
-      return 0;
+    return 0;
 }
 
-char* UpFloor(char currentFloor[4]) {
-      static char newFloor[4]; // Use static to return a pointer to a local variable
-      if (currentFloor[0] == 'B') { // Check if the current floor starts with 'B' - basement
-            int currentFloorNum = atoi(currentFloor + 1); // Convert to int
-            if (currentFloorNum > 1){
-                  currentFloorNum--; // Increment the floor number
-                  snprintf(newFloor, sizeof(newFloor), "B%d", currentFloorNum); // Format new floor
-            } else if (currentFloorNum == 1) {
-                  snprintf(newFloor, sizeof(newFloor), "%d", currentFloorNum); // Format new floor
-            }
-            
-            
-      } else if (isdigit(currentFloor[0])) { // Check if the current floor is a digit - above basement
-            int currentFloorNum = atoi(currentFloor); // Convert to int
-            if (currentFloorNum < 999){
-                  currentFloorNum++;
-                  snprintf(newFloor, sizeof(newFloor), "%d", currentFloorNum); // Format new floor
-            }
-      } else {
-            printf("Invalid Floor.\n");
-            return currentFloor; // No change made, return the same floor
-      }
-      return newFloor; // Return the new floor
+char* UpFloor(const char currentFloor[4]) {
+    static char newFloor[4]; // Use static to return a pointer to a local variable
+    if (currentFloor[0] == 'B') { // Check if the current floor starts with 'B' - basement
+        int currentFloorNum = atoi(currentFloor + 1); // Convert to int
+        if (currentFloorNum > 1){
+            currentFloorNum--; // Increment the floor number
+            snprintf(newFloor, sizeof(newFloor), "B%d", currentFloorNum); // Format new floor
+        } else if (currentFloorNum == 1) {
+            snprintf(newFloor, sizeof(newFloor), "%d", currentFloorNum); // Format new floor
+        }
+    } else if (isdigit(currentFloor[0])) { // Check if the current floor is a digit - above basement
+        int currentFloorNum = atoi(currentFloor); // Convert to int
+        if (currentFloorNum < 999){
+            currentFloorNum++;
+            snprintf(newFloor, sizeof(newFloor), "%d", currentFloorNum); // Format new floor
+        }
+    } else {
+        printf("Invalid Floor.\n");
+        return (char* )currentFloor; // No change made, return the same floor
+    }
+    return newFloor; // Return the new floor
 }
 
-// Function to decrease the current floor if it starts with 'B'
-char* DownFloor(char currentFloor[4]) {
-      static char newFloor[4]; // Use static to return a pointer to a local variable
-      if (currentFloor[0] == 'B') { // Check if the current floor starts with 'B' - basement
-            int currentFloorNum = atoi(currentFloor + 1); // Convert to int
-            if (currentFloorNum < 99){
-                  currentFloorNum++; // Increment the floor number
-                  snprintf(newFloor, sizeof(newFloor), "B%d", currentFloorNum); // Format new floor
-            } else if (currentFloorNum == 99) {
-                  snprintf(newFloor, sizeof(newFloor), "%d", currentFloorNum); // Format new floor
-            }
-            
-      } else if (isdigit(currentFloor[0])) { // Check if the current floor is a digit - above basement
-            int currentFloorNum = atoi(currentFloor); // Convert to int
-            if (currentFloorNum > 1) {
-                  currentFloorNum--;
-                  snprintf(newFloor, sizeof(newFloor), "%d", currentFloorNum); // Format new floor
-            } else if (currentFloorNum == 1) {
-                  snprintf(newFloor, sizeof(newFloor), "B%d", currentFloorNum); // Format new floor
-            }
-            
-      } else {
-            printf("Invalid Floor.\n");
-            return currentFloor; // No change made, return the same floor
-      }
-      return newFloor; // Return the new floor
+char* DownFloor(const char currentFloor[4]) {
+    static char newFloor[4]; // Use static to return a pointer to a local variable
+    if (currentFloor[0] == 'B') { // Check if the current floor starts with 'B' - basement
+        int currentFloorNum = atoi(currentFloor + 1); // Convert to int
+        if (currentFloorNum < 99){
+            currentFloorNum++; // Increment the floor number
+            snprintf(newFloor, sizeof(newFloor), "B%d", currentFloorNum); // Format new floor
+        } else if (currentFloorNum == 99) {
+            snprintf(newFloor, sizeof(newFloor), "%d", currentFloorNum); // Format new floor
+        }
+    } else if (isdigit(currentFloor[0])) { // Check if the current floor is a digit - above basement
+        int currentFloorNum = atoi(currentFloor); // Convert to int
+        if (currentFloorNum > 1) {
+            currentFloorNum--;
+            snprintf(newFloor, sizeof(newFloor), "%d", currentFloorNum); // Format new floor
+        } else if (currentFloorNum == 1) {
+            snprintf(newFloor, sizeof(newFloor), "B%d", currentFloorNum); // Format new floor
+        }
+    } else {
+        printf("Invalid Floor.\n");
+        return (char*)currentFloor; // No change made, return the same floor
+    }
+    return newFloor; // Return the new floor
 }

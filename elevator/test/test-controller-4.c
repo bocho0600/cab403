@@ -17,8 +17,7 @@ int main()
   p = controller();
   usleep(DELAY);
 
-  int alpha = connect_to_controller();
-  send_message(alpha, "CAR Alpha 1 50");
+  int alpha = connect_PL
   send_message(alpha, "STATUS Closed 1 1");
 
   test_call("CALL 3 6", "CAR Alpha");

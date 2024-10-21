@@ -1,7 +1,5 @@
 #include "shared.h"
-
 // Tester for controller (single car, very basic tests)
-
 #define DELAY 50000 // 50ms
 #define MILLISECOND 1000 // 1ms
 

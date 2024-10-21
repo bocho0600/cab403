@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
     // Send the message to the server
     //bzero(buffer, sizeof(buffer)); // Clear the buffer
     //printf("%s\n", buffer);
-    sendMessage(sockfd, buffer);
+    sendMessage(sockfd, buffer); // Send the message to the socket server
     
     // Receive the response from the server
     bzero(buffer, sizeof(buffer));
@@ -94,31 +94,38 @@ int main(int argc, char **argv) {
 // Helper function to validate a floor string
 int isValidFloor(char *floor) {
     int len = strlen(floor);
-
+    
     // Check for basement floors (B1-B99)
     if (floor[0] == 'B') {
+        // Check length for valid range B1 to B99
         if (len == 2 && isdigit(floor[1])) { // B1 to B9
             return 1;
         } else if (len == 3 && isdigit(floor[1]) && isdigit(floor[2])) { // B10 to B99
-            return 1;
-        } else {
-            return 0; // Invalid basement floor
+            // Convert the number part to an integer and check range
+            int basement_num = atoi(floor + 1); // Skip 'B' and convert remaining part
+            if (basement_num >= 1 && basement_num <= 99) {
+                return 1;
+            }
         }
+        return 0; // Invalid basement floor format
     }
 
     // Check for regular floors (1-999)
-    for (int i = 0; i < len; i++) {
-        if (!isdigit(floor[i])) {
-            return 0; // Invalid floor format
+    // All characters must be digits and length should be between 1 to 3
+    if (len >= 1 && len <= 3) {
+        for (int i = 0; i < len; i++) {
+            if (!isdigit(floor[i])) {
+                return 0; // Invalid format if any non-digit is found
+            }
+        }
+
+        int floor_num = atoi(floor);
+        if (floor_num >= 1 && floor_num <= 999) {
+            return 1; // Valid regular floor
         }
     }
 
-    int floor_num = atoi(floor);
-    if (floor_num >= 1 && floor_num <= 999) {
-        return 1; // Valid floor
-    }
-
-    return 0; // Invalid floor
+    return 0; // Invalid regular floor format
 }
 
 // Function to send a message to the server

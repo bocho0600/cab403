@@ -15,9 +15,9 @@ int main()
   msg("Unable to access car Test.");
   system("./internal Test open"); // Valid operation but shm unavailable
 
-  int fd = shm_open("/carTest", O_CREAT | O_RDWR, 0666);
+  int fd = shm_open("/carTest", O_CREAT | O_RDWR, 0666); //- 0666 is the permission
   ftruncate(fd, sizeof(car_shared_mem));
-  car_shared_mem *shm = mmap(0, sizeof(*shm), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  car_shared_mem *shm = mmap(0, sizeof(*shm), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); // 0 is the offset
   init_shm(shm);
 
   pthread_t tid;

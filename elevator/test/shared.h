@@ -50,7 +50,7 @@ void recv_looped(int fd, void *buf, size_t sz)
 
 char *receive_msg(int fd)
 {
-  uint32_t nlen;
+  uint32_t nlen; // Network byte order length
   recv_looped(fd, &nlen, sizeof(nlen));
   uint32_t len = ntohl(nlen);
 

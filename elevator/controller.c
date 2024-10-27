@@ -61,15 +61,16 @@ char* convertINTToFloor(int floor) {
 
 // Register a car with the controller
 int registerCar(char* name, int lowest_floor, int highest_floor) {
-    pthread_mutex_lock(&car_mutex); // Lock mutex before accessing shared resource
-    strcpy(registeredCars[carCount].name, name); // Copy the name of the car
-    registeredCars[carCount].lowest_floor = lowest_floor; // Set the lowest floor
-    registeredCars[carCount].highest_floor = highest_floor; // Set the highest floor
-    registeredCars[carCount].current_floor = 0; // Initialize the current floor of the car
-    registeredCars[carCount].commandCount = 0; // Initialize command count
-    carCount++; // Increment the car count
-    pthread_mutex_unlock(&car_mutex); // Unlock mutex after access
-    return carCount - 1;
+    pthread_mutex_lock(&car_mutex);
+    int carID = carCount; // Local car ID based on carCount
+    strcpy(registeredCars[carID].name, name);
+    registeredCars[carID].lowest_floor = lowest_floor;
+    registeredCars[carID].highest_floor = highest_floor;
+    registeredCars[carID].current_floor = 0;
+    registeredCars[carID].commandCount = 0;
+    carCount++;
+    pthread_mutex_unlock(&car_mutex);
+    return carID;
 }
 
 int findAvailableCar(int source_floor, int destination_floor) {
@@ -125,10 +126,12 @@ void *on_new_client(void *client_socket) {
         char *token = strtok(response, " ");
         
         if (token != NULL && strcmp(token, "STATUS") == 0) {
+            
             char* status = strtok(NULL, " ");
             int current_floor = convertFloortoINT(strtok(NULL, " "));
             int destination_floor = convertFloortoINT(strtok(NULL, " "));
-
+            printf("Car %s status has been changed!",registeredCars[prev_car_id].name );
+            fflush(stdout);
             pthread_mutex_lock(&car_mutex); // Lock mutex before accessing shared resource
             if (strcmp(status, "Between") == 0) {
                 if (current_floor > destination_floor) { // if the car is going down
@@ -145,10 +148,19 @@ void *on_new_client(void *client_socket) {
             }
             pthread_mutex_unlock(&car_mutex); // Unlock after accessing shared resource
         }
+       //printFloorRequests(availableCarID);
+      // printf("Car %s is ready\n", registeredCars[availableCarID].name);
+      // fflush(stdout);
+      printf("Car %s ",registeredCars[availableCarID].name );
+      fflush(stdout);
+        while ((registeredCars[availableCarID].commandCount <= 0) && registeredCars[availableCarID].ready_flag == 0)
+        {
+            // printf("CarID %d is wainting for command.", availableCarID);
+            // fflush(stdout);
 
-        // Wait until there is a command available for the availableCarID
-        while ((registeredCars[availableCarID].commandCount <= 0) && registeredCars[availableCarID].ready_flag == 0);
-            printFloorRequests(availableCarID);
+        };
+        
+           //printFloorRequests(availableCarID);
         bzero(msg, sizeof(msg));
         snprintf(msg, BUFFER_SIZE, "FLOOR %s", registeredCars[availableCarID].FloorRequest[0] + 1); 
         sendMessage(sock, msg); // Send the message to the socket server to announce the car
@@ -230,9 +242,9 @@ int main(){
                   char** commands = processRequestFloor(source_floor_str, destination_floor_str);
                   int source_floor= convertFloortoINT(source_floor_str); // Convert the source floor to an integer
                   int destination_floor = convertFloortoINT(destination_floor_str); // Convert the destination floor to an integer
-                  printf("Source floor: %d, Destination floor: %d\n", source_floor, destination_floor);
+                  //printf("Source floor: %d, Destination floor: %d\n", source_floor, destination_floor);
                   availableCarID = 101;
-                  availableCarID = findAvailableCar(source_floor, destination_floor);\
+                  availableCarID = findAvailableCar(source_floor, destination_floor);
                   registeredCars[availableCarID].ready_flag = 0;
                   if (availableCarID == 101){
                         snprintf(buffer, BUFFER_SIZE, "UNAVAILABLE"); // No car available
@@ -256,6 +268,10 @@ int main(){
                                     printf("Warning: FloorRequest capacity exceeded for car %s\n", registeredCars[availableCarID].name);
                               }
                         }
+                        
+                        
+                       // printf("Controlling car %s\n", registeredCars[availableCarID].name);
+                        
 
                        
 
@@ -282,7 +298,7 @@ int main(){
 
             }
       }
-      pthread_mutex_destroy(&car_mutex); // Destroy the mutex
+      //pthread_mutex_destroy(&car_mutex); // Destroy the mutex
       close(server_fd);
       
       return 0;
@@ -295,7 +311,7 @@ int main(){
 void printFloorRequests(int carID) {
     // Lock the mutex to prevent concurrent access
     pthread_mutex_lock(&car_mutex);
-
+      printf("car %s ready flag is %d.", registeredCars[carID].name,registeredCars[carID].ready_flag );
     printf("total %d Floor requests for car %s :\n",registeredCars[carID].commandCount,registeredCars[carID].name);
     fflush(stdout);
     for (int i = 0; i < registeredCars[carID].commandCount; i++) {

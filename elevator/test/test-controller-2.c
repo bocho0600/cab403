@@ -52,7 +52,7 @@ int main()
   test_recv(alpha, "RECV: FLOOR 1");
 
   // Call an elevator to go from 1 to B2. Only Beta can do this
-  test_call("CALL 1 B2", "CAR Beta");
+  test_call("CALL 2 B2", "CAR Beta");
   test_recv(beta, "RECV: FLOOR 1");
 
   // Call an elevator to go from 3 to 5. Only Gamma can do this

@@ -1,6 +1,19 @@
 #include "shared.h"
 
-// Tester for controller (car put into service / emergency mode)
+// Tester for controller (multiple cars)
+
+/*
+    Alpha  Beta   Gamma
+  5               -----
+  4 -----          | |
+  3  | |           | |
+  2  | |          -----
+  1 -----  -----
+ B1         | |
+ B2         | |
+ B3        -----
+
+*/
 
 #define DELAY 50000 // 50ms
 #define MILLISECOND 1000 // 1ms
@@ -21,57 +34,43 @@ int main()
   int alpha = connect_to_controller();
   send_message(alpha, "CAR Alpha 1 4");
   send_message(alpha, "STATUS Closed 1 1");
-  usleep(DELAY);
-  test_call("CALL 1 3", "CAR Alpha");
-  test_recv(alpha, "RECV: FLOOR 1");
-  send_message(alpha, "STATUS Opening 1 1");
-  test_recv(alpha, "RECV: FLOOR 3");
-  send_message(alpha, "STATUS Open 1 3");
-  send_message(alpha, "STATUS Closing 1 3");
-  send_message(alpha, "STATUS Between 1 3");
-  send_message(alpha, "STATUS Between 2 3");
-  send_message(alpha, "STATUS Opening 3 3");
-  send_message(alpha, "STATUS Open 3 3");
-  send_message(alpha, "STATUS Closing 3 3");
-  send_message(alpha, "STATUS Closed 3 3");
-  // The technician is in the lift and sets it to individual service mode.
-  send_message(alpha, "INDIVIDUAL SERVICE");
-  //close(alpha);
+
+  // Register a car that can take floors B3 to 1
+  int beta = connect_to_controller();
+  send_message(beta, "CAR Beta B3 1");
+  send_message(beta, "STATUS Closed B3 B3");
+
+  // Register a car that can take floors 2 to 5
+  int gamma = connect_to_controller();
+  send_message(gamma, "CAR Gamma 2 5");
+  send_message(gamma, "STATUS Closed 2 2");
 
   usleep(DELAY);
-  // Call a lift from 3 to 4. Normally Alpha could handle this, but it is
-  // in individual service mode so no car can handle it
-  test_call("CALL 3 4", "UNAVAILABLE");
 
-  // Alpha now reappears on a different floor - the technician moved it
-  // Should be schedulable again as before
-  alpha = connect_to_controller();
-  send_message(alpha, "CAR Alpha 1 4");
-  send_message(alpha, "STATUS Closed 2 2");
-  usleep(DELAY);
-  test_call("CALL 3 4", "CAR Alpha");
-  test_recv(alpha, "RECV: FLOOR 3");
+  // Call an elevator to go from 1 to 3. Only Alpha can do this
+  test_call("CALL 2 3", "CAR Alpha");
+  test_recv(alpha, "RECV: FLOOR 2");
 
-  send_message(alpha, "STATUS Between 2 3");
-  send_message(alpha, "STATUS Opening 3 3");
-  test_recv(alpha, "RECV: FLOOR 4");
-  send_message(alpha, "STATUS Open 3 4");
-  send_message(alpha, "STATUS Closing 3 4");
-  send_message(alpha, "STATUS Between 3 4");
-  send_message(alpha, "STATUS Opening 4 4");
-  send_message(alpha, "STATUS Open 4 4");
-  send_message(alpha, "STATUS Closing 4 4");
+  // Call an elevator to go from 1 to B2. Only Beta can do this
+  test_call("CALL B1 B2", "CAR Beta");
+  test_recv(beta, "RECV: FLOOR B1");
 
-  // Put Alpha in emergency mode
-  send_message(alpha, "EMERGENCY");
-  close(alpha);
+  // Call an elevator to go from 3 to 5. Only Gamma can do this
+  test_call("CALL 3 5", "CAR Gamma");
+  test_recv(gamma, "RECV: FLOOR 3");
 
-  usleep(DELAY);
-  // Call a lift from 2 to 1. No car is available to take this
-  test_call("CALL 2 1", "UNAVAILABLE");
+  // Call an elevator to go from 1 to 5. No car can do this
+  test_call("CALL 1 5", "UNAVAILABLE");
+
+  // Call an elevator to go from B3 to 3. No car can do this
+  test_call("CALL B3 3", "UNAVAILABLE");
 
   cleanup(p);
 
+  close(alpha);
+  close(beta);
+  close(gamma);
+  
   printf("\nTests completed.\n");
 }
 
